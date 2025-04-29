@@ -1,0 +1,15 @@
+#ignorar carpetas que no son necesarias de subir
+.vs/
+x64/
+Debug/
+Release/
+packages/
+*.obj
+*.log
+*.sdf
+*.ipch
+*.pdb
+*.exe
+*.user
+*.VC.db 
+*.opensdf
