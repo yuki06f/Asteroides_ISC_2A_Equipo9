@@ -1,6 +1,7 @@
 #include <iostream>
 #include <windows.h>
 #include <string>
+#include <vector>
 //partes de funciones de allegro que se van a usar
 #include <allegro5/allegro.h>
 #include <allegro5/allegro_primitives.h>
@@ -17,23 +18,48 @@ const int ANCHO_PANTALLA = 1200;
 const int ALTO_PANTALLA = 800;
 
 //NUMERO DE ASTEROIDES
-const int MINASTEROIDES = 4; // Número mínimo de asteroides
-const int MAXASTEROIDES = 12; // Número máximo de asteroides
+const int MINASTEROIDES = 4; // NÃºmero mÃ­nimo de asteroides
+const int MAXASTEROIDES = 12; // NÃºmero mÃ¡ximo de asteroides
+const int MAX_BALAS = 100; //cantidad mÃ¡xima de las balas
 
 // Estructura para los asteroides
 struct Asteroide {
-	float x, y; // Posición en la pantalla del asteroide
+	float x, y; // PosiciÃ³n en la pantalla del asteroide
 	float velocidadX, velocidadY; //velocidad en X y Y, puede ser de -2 a 2, siendo las negativas las que le permiten desplazarse a la izq o hacia abajo, las positivas de derecha hacia arriba
-	int tamano; //Grande = 3, mediano = 2, pequeño = 1
-	bool estado; // true si está activo, false si ha sido destruido
+	int tamano; //Grande = 3, mediano = 2, pequeÃ±o = 1
+	bool estado; // true si estÃ¡ activo, false si ha sido destruido
 };
 
-//FUNCIONES
+//Estructura de las balas
+struct Bala {
+	float x, y;
+	bool activa;
+};
+
+//Estructura de la nave
+struct Nave {
+	float x, y;
+	Nave() {
+		x = ANCHO_PANTALLA / 2;
+		y = ALTO_PANTALLA - 100;
+	}
+};
+
+
+//PROTOTIPOS DE FUNCIONES
+//Asteroides
 void dibujarPantalla();
 void inicializarAsteroides(Asteroide*, int); //INICIALIZAR ASTEROIDES
 void moverAsteroides(Asteroide*, int); //MOVER ASTEROIDES USANDO UN VECTOR Y UN NUMERO DE ASTEROIDES A MOVER
-void dividirAsteroides(Asteroide*, int); //DIVIDIR ASTEROIDES USANDO UN VECROR Y EL NUMERO DE DISPAROS, SE LLAMA CUANDO SE USA LA FUNCIÓN DE DETECTAR COLISIONES
+void dividirAsteroides(Asteroide*, int); //DIVIDIR ASTEROIDES USANDO UN VECROR Y EL NUMERO DE DISPAROS, SE LLAMA CUANDO SE USA LA FUNCIÃ“N DE DETECTAR COLISIONES
 void mostrarExplosion(int x, int y);
+
+//Bala y colisiones
+void inicializarBalas(Bala*);
+void dispararBala(Bala*, float, float);
+void moverBalas(Bala*);
+void dibujarBalas(Bala*);
+void detectarColisiones(Bala*, Asteroide*, int);
 
 int main(){
 	//obtener la resolucion de la pantalla para poder centrarla
@@ -44,7 +70,7 @@ int main(){
 
 	//inciializa allegro y detecte que no haya errores 
 	if (!al_init()) {
-		al_show_native_message_box(NULL, "Error Critico", "Error 404", "No se pudo cargar correctamente la librería allegro", NULL, ALLEGRO_MESSAGEBOX_OK_CANCEL);
+		al_show_native_message_box(NULL, "Error Critico", "Error 404", "No se pudo cargar correctamente la librerÃ­a allegro", NULL, ALLEGRO_MESSAGEBOX_OK_CANCEL);
 		return -1;
 	}
 
@@ -65,23 +91,21 @@ int main(){
 	ALLEGRO_FONT* roboto = al_load_font("roboto.ttf", 30, 0); //importar roboto
 
 	ALLEGRO_TIMER* segundoTimer = al_create_timer(1.0); //segundero
-	ALLEGRO_TIMER* FPS = al_create_timer(1.0/35); //timer de fps 
+	ALLEGRO_TIMER* FPS = al_create_timer(1.0/60); //timer de fps 
 
 	ALLEGRO_EVENT evento; //varable de evento
 	ALLEGRO_EVENT_QUEUE *queue = al_create_event_queue(); //manejar cola de eventos
+	ALLEGRO_KEYBOARD_STATE keyState; //para manjejar el estado del teclado
 
-	ALLEGRO_BITMAP* nave = al_load_bitmap("assets/img/nave.png"); //imagen de la nave
-	ALLEGRO_BITMAP* asteroide = al_load_bitmap("assets/img/asteroide.png");
-	if (!asteroide) {
+	ALLEGRO_BITMAP* naveImg = al_load_bitmap("assets/img/nave.png"); //imagen de la nave
+	ALLEGRO_BITMAP* asteroideImg = al_load_bitmap("assets/img/asteroide.png");
+	if (!asteroideImg) {
 		al_show_native_message_box(NULL, "Error", "No se pudo cargar la imagen del asteroide", NULL, NULL, ALLEGRO_MESSAGEBOX_ERROR);
 		return -1;
 	}
 	//ALLEGRO_BITMAP* ovni_1 = al_load_bitmap("ovni_1.png"); //imagen del ovni tipo 1
 	//ALLEGRO_BITMAP* ovni_2 = al_load_bitmap("ovni_2.png"); //imagen del ovni tipo 2
 
-
-
-	ALLEGRO_KEYBOARD_STATE keyState; //para manjejar el estado del teclado
 
 
 	//REGISTRO DE EVENTOS E INCIIALIZACION
@@ -103,36 +127,57 @@ int main(){
 	int x, y;
 	bool running = true;
 
-	srand(time(NULL)); // Inicializar la semilla para números aleatorios
-	int numeroAsteroides = 15; //minimo 4 asteroides
+	srand(time(NULL)); // Inicializar la semilla para nÃºmeros aleatorios
+	int numeroAsteroides = 8; //minimo 4 asteroides
 	Asteroide* asteroides = new Asteroide[numeroAsteroides];
+	Bala balas[MAX_BALAS];
+	Nave nave;
 
 	inicializarAsteroides(asteroides, numeroAsteroides);
+	nave.x = ANCHO_PANTALLA / 2;
+	nave.y = ALTO_PANTALLA - 60;
+
+	inicializarBalas(balas);
 
 
 	//CICLO DE LA EJECUCION DEL PROGRAMA
 	while (running) {
 
 		al_wait_for_event(queue, &evento); //esperamos al evento
-
+		al_get_keyboard_state(&keyState);
 
 		if (evento.type == ALLEGRO_EVENT_TIMER) {
 			if (evento.timer.source == segundoTimer) {
 				segundos++;
 			}
 
+			//if(asteroides == 0)
+
 			if (evento.timer.source == FPS) {
 
 				// Mover asteroides
 				moverAsteroides(asteroides, numeroAsteroides);
-
+				moverBalas(balas);
+				detectarColisiones(balas, asteroides, numeroAsteroides);
 				al_clear_to_color(negro);
 
+				// Dibuja la nave
+				al_draw_scaled_bitmap(naveImg, 0, 0,
+					al_get_bitmap_width(naveImg),
+					al_get_bitmap_height(naveImg),
+					nave.x, nave.y,
+					30, 30, 0); // dibuja la nave a 50x50 px
+
+				// Dibuja las balas
+				dibujarBalas(balas);
+
+
+				//Dibujar tamaÃ±ps de asteroides
 				for (int i = 0; i < numeroAsteroides; i++) {
 					if (asteroides[i].estado) {
 						int nuevoAncho, nuevoAlto;
 
-						// Cambiar tamaño según el tamaño del asteroide (puedes ajustar esto)
+						// Cambiar tamaÃ±o segÃºn el tamaÃ±o del asteroide (puedes ajustar esto)
 						if (asteroides[i].tamano == 3) { // Grande
 							nuevoAncho = 55;
 							nuevoAlto = 55;
@@ -141,19 +186,20 @@ int main(){
 							nuevoAncho = 40;
 							nuevoAlto = 40;
 						}
-						else if(asteroides[i].tamano) { // Pequeño
+						else if(asteroides[i].tamano == 1) { // PequeÃ±o
 							nuevoAncho = 25;
 							nuevoAlto = 25;
 						}
 
-						// Dibujar asteroide con el tamaño ajustado
+						// Dibujar asteroide con el tamaÃ±o ajustado
 						al_draw_scaled_bitmap(
-							asteroide,
-							0, 0, al_get_bitmap_width(asteroide), al_get_bitmap_height(asteroide), // Usar toda la imagen
-							asteroides[i].x, asteroides[i].y,  // Posición en la pantalla
-							nuevoAncho, nuevoAlto,             // Nuevo tamaño basado en el tipo de asteroide
-							0); // Sin rotación
-						//al_draw_filled_circle(asteroides[i].x + 25, asteroides[i].y + 25, 10, al_map_rgb(255, 0, 0)); // Rojo para visualización
+							asteroideImg,
+							0, 0, al_get_bitmap_width(asteroideImg), al_get_bitmap_height(asteroideImg), // Usar toda la imagen
+							asteroides[i].x, asteroides[i].y,  // PosiciÃ³n en la pantalla
+							nuevoAncho, nuevoAlto,             // Nuevo tamaÃ±o basado en el tipo de asteroide
+							0); // Sin rotaciÃ³n
+
+						//al_draw_filled_circle(asteroides[i].x + 25, asteroides[i].y + 25, 10, al_map_rgb(255, 0, 0)); // Rojo para visualizaciÃ³n
 					}
 
 						
@@ -163,29 +209,33 @@ int main(){
 				al_flip_display();
 
 
-			}
+			}//FPS
+		}//Timer
+		
+		if (al_key_down(&keyState, ALLEGRO_KEY_LEFT) && nave.x > 0) {
+			nave.x -= 5;
 		}
-		/*else if (evento.type == ALLEGRO_EVENT_KEY_DOWN) {
-			for (int i = 0; i < numeroAsteroides; i++) {
-				if (asteroides[i].estado) {
-					switch (evento.keyboard.keycode) {
-					case ALLEGRO_KEY_LEFT:
-						asteroides[i].x -= 5;
-						break;
-					case ALLEGRO_KEY_RIGHT:
-						asteroides[i].x += 5;
-						break;
-					}
 
-				}
-			}
-		}*/
+		if (al_key_down(&keyState, ALLEGRO_KEY_RIGHT) && nave.x < ANCHO_PANTALLA - 50) {
+			nave.x += 5;
+		}
+
+		if (al_key_down(&keyState, ALLEGRO_KEY_SPACE)) {
+			dispararBala(balas, nave.x, nave.y);
+		}
 
 		//al_rest(1000); //pausa por n segundos
 	}//while
 
+	//DESTRUCCION DE ELEMENTOS
 	delete[] asteroides;
 	al_destroy_display(ventana); //destruir la ventana tras terminar la ejecucion
+	al_destroy_bitmap(naveImg);
+	al_destroy_bitmap(asteroideImg);
+	al_destroy_font(roboto);
+	al_destroy_timer(segundoTimer);
+	al_destroy_timer(FPS);
+	al_destroy_event_queue(queue);
 
 	return 0;
 }
@@ -200,16 +250,16 @@ void inicializarAsteroides(Asteroide *asteroides, int numAsteroides) {
 	// Recorre el arrglo de asteroides para asignarles sus 
 	for (int i = 0; i < numAsteroides; i++) {
 
-		asteroides[i].x = rand() % (ANCHO_PANTALLA); // Posición X entre 0 y 799
-		asteroides[i].y = rand() % (ALTO_PANTALLA); // Posición Y entre 0 y 599
+		asteroides[i].x = rand() % (ANCHO_PANTALLA); // PosiciÃ³n X entre 0 y 799
+		asteroides[i].y = rand() % (ALTO_PANTALLA); // PosiciÃ³n Y entre 0 y 599
 
 		asteroides[i].velocidadX = (rand() % 5) - 2; // Velocidad X entre -2 y 2
 		asteroides[i].velocidadY = (rand() % 5) - 2; // Velocidad Y entre -2 y 2
 
 
-		asteroides[i].tamano = rand() % 3 + 1; // Tamaño aleatorio (1=pequeño, 2=mediano, 3=grande)
+		asteroides[i].tamano = rand() % 3 + 1; // TamaÃ±o aleatorio (1=pequeÃ±o, 2=mediano, 3=grande)
 
-		asteroides[i].estado = true; //todos los asteroides están activos inicialmente
+		asteroides[i].estado = true; //todos los asteroides estÃ¡n activos inicialmente
 	}
 }
 
@@ -223,7 +273,7 @@ void moverAsteroides(Asteroide* asteroides, int numAsteroides) {
 			if (asteroides[i].x > ANCHO_PANTALLA) { //si toca la pantalla en la derecga en el eje X, aparece del aldo izquierdo
 				asteroides[i].x = 0;
 			}
-			if (asteroides[i].x < 0) { //si está tocando el extremo izquiero, aparece en la derecha
+			if (asteroides[i].x < 0) { //si estÃ¡ tocando el extremo izquiero, aparece en la derecha
 				asteroides[i].x = ANCHO_PANTALLA;
 			}
 			if (asteroides[i].y > ALTO_PANTALLA) { //si llega al final de la parte superior, se regresa a la parte inferior
@@ -239,7 +289,7 @@ void moverAsteroides(Asteroide* asteroides, int numAsteroides) {
 void dividirAsteroides(Asteroide *asteroides, int indice) {
 	Asteroide original = asteroides[indice];
 
-	// Simula una animación de explosión
+	// Simula una animaciÃ³n de explosiÃ³n
 	mostrarExplosion(original.x, original.y);
 
 	if (original.tamano < 2) {
@@ -254,9 +304,9 @@ void dividirAsteroides(Asteroide *asteroides, int indice) {
 			nuevo.velocidadX = (rand() % 5) - 2; // Velocidad X entre -2 y 2
 			nuevo.velocidadY = (rand() % 5) - 2; // Velocidad Y entre -2 y 2
 
-			nuevo.estado = true; //todos los asteroides están activos inicialmente
+			nuevo.estado = true; //todos los asteroides estÃ¡n activos inicialmente
 
-			//asteroides.push_back(nuevo); // añadimos
+			//asteroides.push_back(nuevo); // aÃ±adimos
 		}
 	}
 
@@ -265,6 +315,82 @@ void dividirAsteroides(Asteroide *asteroides, int indice) {
 
 }
 
+//
 void mostrarExplosion(int x, int y) {
 
+}
+
+// Inicializar balas
+void inicializarBalas(Bala *balas) {
+	for (int i = 0; i < MAX_BALAS; i++) {
+		balas[i].activa = false;
+	}
+}
+
+// Disparar una bala
+void dispararBala(Bala* balas, float x, float y) {
+	for (int i = 0; i < MAX_BALAS; i++) {
+		if (!balas[i].activa) {
+			balas[i].x = x;
+			balas[i].y = y;
+			balas[i].activa = true;
+			break;
+		}
+	}
+}
+
+// Mover balas
+void moverBalas(Bala* balas) {
+	for (int i = 0; i < MAX_BALAS; i++) {
+		if (balas[i].activa) {
+			balas[i].y -= 5;
+			if (balas[i].y < 0) {
+				balas[i].activa = false;
+			}
+		}
+	}
+}
+
+// Dibujar balas
+void dibujarBalas(Bala* balas) {
+	for (int i = 0; i < MAX_BALAS; i++) {
+		if (balas[i].activa) {
+			al_draw_filled_rectangle(balas[i].x - 2, balas[i].y - 10, balas[i].x + 2, balas[i].y, al_map_rgb(255, 255, 255));
+		}
+	}
+}
+
+// ColisiÃ³n bala-asteroide
+void detectarColisiones(Bala* balas, Asteroide* asteroides, int numAsteroides) {
+	for (int i = 0; i < MAX_BALAS; i++) {
+		if (balas[i].activa) {
+			for (int j = 0; j < numAsteroides; j++) {
+				if (asteroides[j].estado) {
+					float dx = balas[i].x - asteroides[j].x;
+					float dy = balas[i].y - asteroides[j].y;
+					float distancia = sqrt(dx * dx + dy * dy);
+
+					float radio_bala = 3;
+					float radio_asteroide = asteroides[j].tamano * 5;
+
+					if (distancia < (radio_bala + radio_asteroide)) {
+						balas[i].activa = false;
+						if (asteroides[j].estado) {
+							switch (asteroides[j].tamano) {
+								case 1:
+									asteroides[j].estado = false;
+									break;
+								case 2:
+									asteroides[j].tamano = 1;
+									asteroides[numAsteroides + 1];
+									mostrarExplosion(asteroides[j].x, asteroides[j].y);
+
+							}
+						}
+						break;
+					}
+				}
+			}
+		}
+	}
 }
