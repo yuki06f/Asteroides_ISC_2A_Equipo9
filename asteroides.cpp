@@ -262,6 +262,15 @@ void inicializarAsteroides(Asteroide *asteroides, int numAsteroides) {
 		asteroides[i].estado = true; //todos los asteroides están activos inicialmente
 	}
 }
+void inicializarAsteroide(Asteroide asteroide) {
+	asteroide.x = rand() % (ANCHO_PANTALLA); // Posición X entre 0 y 799
+	asteroide.y = rand() % (ALTO_PANTALLA); // Posición Y entre 0 y 599
+
+	asteroide.velocidadX = (rand() % 5) - 2; // Velocidad X entre -2 y 2
+	asteroide.velocidadY = (rand() % 5) - 2; // Velocidad Y entre -2 y 2
+
+	asteroide.estado = true; //todos los asteroides están activos inicialmente
+}
 
 void moverAsteroides(Asteroide* asteroides, int numAsteroides) {
 	for (int i = 0; i < numAsteroides; i++) {
@@ -381,16 +390,31 @@ void detectarColisiones(Bala* balas, Asteroide* asteroides, int numAsteroides) {
 									asteroides[j].estado = false;
 									break;
 								case 2:
+									mostrarExplosion(asteroides[j].x, asteroides[j].y);
 									asteroides[j].tamano = 1;
 									asteroides[numAsteroides + 1];
+									Asteroide nuevo;
+									inicializarAsteroide(nuevo);
+									break;
+								case 3:
 									mostrarExplosion(asteroides[j].x, asteroides[j].y);
-
+									asteroides[j].tamano = 2;
+									asteroides[numAsteroides + 2];
+									Asteroide nuevo1, nuevo2;
+									inicializarAsteroide(nuevo1);
+									inicializarAsteroide(nuevo2);
+									break;
 							}
 						}
+
 						break;
 					}
 				}
 			}
+			balas[i].activa = false;
+		}//if bala activa
+		else {
+
 		}
 	}
 }
